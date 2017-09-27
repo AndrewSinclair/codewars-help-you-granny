@@ -2,6 +2,8 @@
 
 (def grammas "X0")
 
+(defrecord Road [a b dist])
+
 (defn adjacent-road
   "Given 2 roads representing the hypotenuse and opposite sides of a right angle triangle,
   find the road that represents the adjacent side."
@@ -108,10 +110,11 @@
     second))
 
 (defn distance-accumulator
-  [acc [town1 town2]]
-  (->>
-    (shortest-distance-between-towns town1 town2 dist-table)
-    (+ acc)))
+  [dist-table]
+  (fn [acc [town1 town2]]
+    (->>
+      (shortest-distance-between-towns town1 town2 dist-table)
+      (+ acc))))
 
 (defn tour
   "for each friend in the order provided,
@@ -121,10 +124,10 @@
   [friends friend-towns dist-table]
   (as-> friends f
     (map (partial find-town-by-friend friend-towns) f)
-    (conj f grammas)
-    (apply vector f)
-    (conj f grammas)
+    (filter identity f) ; remove any friends whom we do not know their address
+    (vector grammas f grammas)
+    (flatten f)
     (partition 2 1 f)
-    (reduce distance-accumulator 0 f)
+    (reduce (distance-accumulator dist-table) 0 f)
     (int f)))
 
