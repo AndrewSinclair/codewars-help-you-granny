@@ -68,12 +68,11 @@
     dist-table
     distances->roads
     infer-other-roads
-    (remove (fn [{:keys [a b dist]}] (or (= a grammas) (= b grammas))))
-    rest
+    (remove (fn [{:keys [a b]}] (or (= a grammas) (= b grammas))))
     (reduce
-      (fn [[[_ prev-dist] & _ :as acc] [town dist]]
+      (fn [[[_ prev-dist] & _ :as acc] {town :b dist :dist}]
         (cons [town (+ prev-dist dist)] acc))
-      [(first dist-table)])))
+      [[(first (first dist-table)) 0.0]])))
 
 (defn path-avoiding-grammas
   "using the math approach, we can just add up the distances on the cumulative distances on the high
