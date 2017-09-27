@@ -64,15 +64,15 @@
 
 (defn cumulative-distances
   [dist-table]
-  (->>
-    dist-table
-    distances->roads
-    infer-other-roads
-    (remove (fn [{:keys [a b]}] (or (= a grammas) (= b grammas))))
-    (reduce
-      (fn [[[_ prev-dist] & _ :as acc] {town :b dist :dist}]
-        (cons [town (+ prev-dist dist)] acc))
-      [[(first (first dist-table)) 0.0]])))
+  (let [towns           (map first dist-table)
+        distances       (->>
+                          dist-table
+                          distances->roads
+                          infer-other-roads
+                          (remove (fn [{:keys [a b]}] (or (= a grammas) (= b grammas))))
+                          (map (fn [{:keys [b dist]}] dist))
+                          (reductions + 0))]
+    (map vector towns distances)))
 
 (defn path-avoiding-grammas
   "using the math approach, we can just add up the distances on the cumulative distances on the high
