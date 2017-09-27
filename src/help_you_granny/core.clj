@@ -66,6 +66,9 @@
   [dist-table]
   (->>
     dist-table
+    distances->roads
+    infer-other-roads
+    (remove (fn [{:keys [a b dist]}] (or (= a grammas) (= b grammas))))
     rest
     (reduce
       (fn [[[_ prev-dist] & _ :as acc] [town dist]]
