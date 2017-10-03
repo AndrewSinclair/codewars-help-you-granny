@@ -1,135 +1,122 @@
 (ns help-you-granny.core)
 
-(def grammas "X0")
+(defn remove-nils
+  [xs]
+  (filter identity xs))
 
-(defrecord Road [a b dist])
+(defn squared
+  [x]
+  (* x x))
 
-(defn adjacent-road
-  "Given 2 roads representing the hypotenuse and opposite sides of a right angle triangle,
-  find the road that represents the adjacent side."
-  [{_ :a b1 :b dist1 :dist} {_ :a b2 :b dist2 :dist}]
-  (->>
-    (- (* dist2 dist2) (* dist1 dist1))
-    Math/abs
-    Math/sqrt
-    (->Road b1 b2)))
+(defn get-subsequence-between
+  [x y xs]
+  (let [vect  (vec xs)
+        start (.indexOf vect x)
+        end   (.indexOf vect y)]
+    (subvec vect start (inc end))))
 
-(defn distances->roads
-  [distances]
-  (->>
-    distances
-    (map #(->Road grammas (first %) (second %)))))
+(defn find-by
+  [pred xs]
+  (->> xs
+    (filter pred)
+    first))
 
-(defn reverse-road
-  [{:keys [a b dist]}]
-  (->Road b a dist))
-
-(defn concat-reverse-roads
-  [roads]
-  (concat roads (map reverse-road roads)))
-
-(defn infer-other-roads
-  "We have all roads from grammas to Xi. We also need all roads from Xi to Xi+1."
-  [roads]
-  (concat
-    roads
-    (->>
-      roads
-      (partition 2 1)
-      (map
-        (fn [[road1 road2]]
-          (adjacent-road road1 road2))))))
-
-(defn complete-road-map
-  [dist-table]
-  (->>
-    dist-table
-    distances->roads
-    infer-other-roads
-    concat-reverse-roads))
-
-(defn distance-between-towns
-  [town1 town2 road-map]
-  (->>
-    road-map
-    (filter (fn [{:keys [a b dist]}] (and (= a town1) (= b town2))))
-    first
-    :dist))
-
-(defn path-thru-grammas
-  [town1 town2 road-map]
-  (+
-    (distance-between-towns town1 grammas road-map)
-    (distance-between-towns grammas town2 road-map)))
-
-(defn cumulative-distances
-  [dist-table]
-  (let [towns           (map first dist-table)
-        distances       (->>
-                          dist-table
-                          distances->roads
-                          infer-other-roads
-                          (remove (fn [{:keys [a b]}] (or (= a grammas) (= b grammas))))
-                          (map (fn [{:keys [b dist]}] dist))
-                          (reductions + 0))]
-    (map vector towns distances)))
-
-(defn path-avoiding-grammas
-  "using the math approach, we can just add up the distances on the cumulative distances on the high
-  road and subtract the distance between two towns to get their distance"
-  [town1 town2 cumulative-dists]
-  (let [[_ dist1] (->> cumulative-dists (filter #(= (first %) town1)) first)
-        [_ dist2] (->> cumulative-dists (filter #(= (first %) town2)) first)]
-    (->
-      (- dist1 dist2)
-      Math/abs)))
-
-(defn shortest-distance-between-towns
-  "Finds the shortest path between two ``towns''.
-  Due to the unique geometry stipulated in the puzzle description,
-  towns are arranged in such a way that we don't have to search
-  through all possible paths to find the shortest.
-  The shortest path can be one  of the following scenarios:
-   1: If there is a direct (1-step) path between two towns, then it is the shortest
-    Otherwise the shortest path is the smallest between:
-   2: The (2-step) path that goes from A to X0 and then X0 to B.
-   3: Or the multi-step path that goes from A to B without going through X0."
-  [town1 town2 dist-table]
-  (let [road-map (complete-road-map dist-table)
-        dist     (distance-between-towns town1 town2 road-map)]
-    (or
-      dist
-      (min
-        (path-thru-grammas town1 town2 road-map)
-        (path-avoiding-grammas town1 town2 (cumulative-distances dist-table))))))
+(defn distance-to-town
+  [town dist-table]
+  (find-by #(= town (first %)) dist-table))
 
 (defn find-town-by-friend
   [friend-towns friend]
-  (->>
-    friend-towns
-    (filter #(= (first %) friend))
-    first
+  (->> friend-towns
+    (find-by #(= friend (first %)))
     second))
 
-(defn distance-accumulator
-  [dist-table]
-  (fn [acc [town1 town2]]
-    (->>
-      (shortest-distance-between-towns town1 town2 dist-table)
-      (+ acc))))
+(defn distance-to-grammas
+  [town dist-table]
+  (->> dist-table
+    (distance-to-town town)
+    second))
+
+(defn angle-of-triangle
+  [adjacent hypotenuse]
+  (Math/acos (/ adjacent hypotenuse)))
+
+(defn get-pairwise-distances
+  [town-dists]
+  (->> town-dists
+    (map second)
+    (partition 2 1)))
+
+(defn angle-between
+  "We need to calculate the angle of the ``fan'' between two towns,
+  These angles are in right-angle triangles, so we use pythogorean theorem.
+  Then use this angle for calculating the euclidean distance between those towns."
+  [town1 town2 dist-table]
+  (let [dist1 (distance-to-town town1 dist-table)
+        dist2 (distance-to-town town2 dist-table)]
+    (->> dist-table
+      (get-subsequence-between dist1 dist2)
+      get-pairwise-distances
+      (map (fn [[dist1 dist2]] (angle-of-triangle dist1 dist2)))
+      (reduce +))))
+
+(defn distance-between-towns
+  "Calculate euclidean distance between two towns using trigonometry's ``Law of Cosines''."
+  [town1 town2 dist-table]
+  (let [dist1  (distance-to-grammas town1 dist-table)
+        dist2  (distance-to-grammas town2 dist-table)
+        angle  (angle-between town1 town2 dist-table)]
+    (-> (squared dist1)
+      (+ (squared dist2))
+      (- (* 2 dist1 dist2 (Math/cos angle)))
+      Math/sqrt)))
+
+(defn sort-dist-table-by-towns
+  [dist-table towns]
+  (->> dist-table
+    (sort-by #(.indexOf towns (first %)))))
+
+(defn sort-friend-towns-by-visiting-order
+  [friends friend-towns]
+  (->> friend-towns
+    (sort-by #(.indexOf friends (first %)))))
+
+(defn towns->distances-between-towns
+  [dist-table towns]
+  (let [sorted-dist-table (sort-dist-table-by-towns dist-table towns)]
+    (->> towns
+      (partition 2 1)
+      (map (fn [[town1 town2]]
+             (distance-between-towns town1 town2 sorted-dist-table))))))
+
+(defn get-first-and-last-town-that-is-actually-visited
+  [friend-towns friends]
+  (let [last-town   (->> friend-towns
+                      (sort-friend-towns-by-visiting-order friends)
+                      last
+                      second)
+        first-town  (-> friend-towns
+                      (find-town-by-friend (first friends)))]
+    [first-town last-town]))
+
+(defn distance-to-and-from-grammas
+  [friend-towns friends dist-table]
+  (let [[first-town last-town] (get-first-and-last-town-that-is-actually-visited friend-towns friends)]
+    (+ (distance-to-grammas first-town dist-table)
+       (distance-to-grammas last-town dist-table))))
+
+(defn get-visited-towns-in-order
+  [friend-towns friends]
+  (->> friends
+    (map (partial find-town-by-friend friend-towns))
+    remove-nils))
 
 (defn tour
-  "for each friend in the order provided,
-    find the town they're in
-    and sum the distance traveled so far with the distance to get there.
-  Afterwards, travel one more time back home."
   [friends friend-towns dist-table]
-  (as-> friends f
-    (map (partial find-town-by-friend friend-towns) f)
-    (filter identity f) ; remove any friends whom we do not know their address
-    (vector grammas f grammas)
-    (flatten f)
-    (partition 2 1 f)
-    (reduce (distance-accumulator dist-table) 0 f)
-    (int f)))
+  (->> friends
+    (get-visited-towns-in-order friend-towns)
+    (towns->distances-between-towns dist-table)
+    (reduce +)
+    (+ (distance-to-and-from-grammas friend-towns friends dist-table))
+    int))
 
